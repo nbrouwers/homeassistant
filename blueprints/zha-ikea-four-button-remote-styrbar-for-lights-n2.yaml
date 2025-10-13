@@ -8,23 +8,29 @@ blueprint:
     which is based on the work of [frenck](https://community.home-assistant.io/u/frenck)
     with the five button version. Further improved (or better: hacked) by Niels Brouwers. Added the conditions to respond to the up- and down button to adjust brightness.
     Inspired by: https://community.home-assistant.io/t/zha-ikea-four-button-remote-styrbar-for-lights-e2001-e2002/384482
-    
+
+
     Pressing the up button will turn on the lights at the last set brightness (unless
     the force brightness is toggled on in the blueprint).
 
+
     Pressing the down button will turn the lights off again.
+
 
     Pressing and holding the up/down buttons will change the brightness smoothly and
     can be pressed and hold until the brightness is satisfactory.
+
 
     The "left" and "right" buttons can be assigned to a short and long button press
     action. This allows you to assign, e.g., a scene or anything else. Use the left
     and right button events with care, as before the long press event is sent, the
     "on" event gets triggered.
-    
+
+
     Note: this blue print depends on the following yaml code, that must be added to the
     configuration.yaml file in your home assistancec instance:
-    
+
+
     input_select:
       color_loop:
         name: Color Loop
@@ -42,9 +48,9 @@ blueprint:
           - sky
           - lime
           - yellow
+
   
   Happy remoting your lights! :)
-
   '
 
   domain: automation
