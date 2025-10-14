@@ -177,7 +177,6 @@ action:
       - "{{ endpoint_id == 1 }}"
     sequence:
       - repeat:
-          count: 10
           sequence:
             - service: light.turn_on
               target: !input "light"
@@ -185,13 +184,15 @@ action:
                 brightness_step_pct: 10
                 transition: !input "hold_time"
             - delay: !input "hold_time"
+          until:
+            - condition: template
+              value_template: "{{ command == 'stop_with_on_off' }}"
   - conditions:
       - "{{ command == 'move' }}"
       - "{{ cluster_id == 8 }}"
       - "{{ endpoint_id == 1 }}"
     sequence:
       - repeat:
-          count: 10
           sequence:
             - service: light.turn_on
               target: !input "light"
@@ -199,6 +200,9 @@ action:
                 brightness_step_pct: -10
                 transition: !input "hold_time"
             - delay: !input "hold_time"
+          until:
+            - condition: template
+              value_template: "{{ command == 'stop' }}"
   - conditions:
       - "{{ command == 'hold' }}"
       - "{{ cluster_id == 5 }}"
@@ -288,4 +292,4 @@ action:
     minutes: 0
     seconds: 0
     milliseconds: 500
-mode: single
+mode: restart
