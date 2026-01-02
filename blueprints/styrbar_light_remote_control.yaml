@@ -33,6 +33,13 @@ blueprint:
       selector:
         device:
           multiple: false
+    color_loop_helper:
+      name: Color Loop Helper
+      description: Input select containing the colors to cycle through.
+      selector:
+        entity:
+          domain: input_select
+          multiple: false
     brightness_step:
       name: Brightness Step
       description: Brightness adjustment step (slider percentage, 1-100%).
@@ -191,6 +198,7 @@ trigger:
   id: dim_stop
 variables:
   light_entity: !input light_entity
+  color_loop_helper: !input color_loop_helper
   brightness_step: !input brightness_step
   default_color_temp: !input default_color_temp
   min_color_temp: !input min_color_temp
@@ -217,13 +225,14 @@ action:
     - condition: trigger
       id: change_color_left
     sequence:
+    - service: input_select.select_previous
+      target:
+        entity_id: "{{ color_loop_helper }}"
     - service: light.turn_on
       target:
         entity_id: !input light_entity
       data:
-        color_temp_kelvin: "{{\n  [\n    [\n      (state_attr(light_entity, 'color_temp_kelvin')
-          | default(default_color_temp, true) | int) - 200,\n      max_color_temp\n
-          \   ] | min,\n    min_color_temp\n  ] | max\n}}"
+        color_name: "{{ states(color_loop_helper) }}"
   - conditions:
     - condition: trigger
       id: change_color_left_hold
@@ -246,13 +255,14 @@ action:
     - condition: trigger
       id: change_color_right
     sequence:
+    - service: input_select.select_next
+      target:
+        entity_id: "{{ color_loop_helper }}"
     - service: light.turn_on
       target:
         entity_id: !input light_entity
       data:
-        color_temp_kelvin: "{{\n  [\n    [\n      (state_attr(light_entity, 'color_temp_kelvin')
-          | default(default_color_temp, true) | int) + 200,\n      max_color_temp\n
-          \   ] | min,\n    min_color_temp\n  ] | max\n}}"
+        color_name: "{{ states(color_loop_helper) }}"
   - conditions:
     - condition: trigger
       id: change_color_right_hold
