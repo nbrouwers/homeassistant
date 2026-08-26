@@ -112,7 +112,8 @@ actions:
 
   # Turn all configured lights on at full brightness.
   - action: light.turn_on
-    target: !input lights
+    target:
+      entity_id: !input lights
     data:
       brightness_pct: 100
 
