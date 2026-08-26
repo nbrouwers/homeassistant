@@ -1,0 +1,234 @@
+blueprint:
+  name: House-wide Smoke Alarm (SMSZB-120)
+  description: >
+    Propagates a smoke alarm from any configured Develco/Frient SMSZB-120
+    smoke detector to the other configured detectors, turns configured lights
+    on at 100%, announces the alarm on configured smart speakers, and sends
+    notifications to configured Home Assistant notify entities. The alarm
+    remains active until all configured smoke detectors are clear.
+  domain: automation
+  source_url: https://www.zigbee2mqtt.io/devices/SMSZB-120.html
+  input:
+    smoke_detectors:
+      name: Smoke detectors
+      description: >
+        All SMSZB-120 smoke detectors participating in the house-wide alarm.
+        Select their Smoke binary sensors.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: binary_sensor
+              device_class: smoke
+
+    lights:
+      name: Lights
+      description: >
+        Lights to switch on at 100% brightness during a smoke alarm.
+        Their previous states are restored when the alarm clears.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: light
+
+    smart_speakers:
+      name: Smart speakers
+      description: >
+        Media players on which the smoke alarm announcement will be spoken.
+        The first available Home Assistant TTS entity is used.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: media_player
+
+    smartphones:
+      name: Smartphones
+      description: >
+        Home Assistant notify entities belonging to the smartphones that
+        should receive alarm and alarm-cleared notifications.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - domain: notify
+
+triggers:
+  - trigger: state
+    entity_id: !input smoke_detectors
+    to: "on"
+
+conditions: []
+
+actions:
+  - variables:
+      smoke_detectors: !input smoke_detectors
+      smart_speakers: !input smart_speakers
+
+      originating_detector: >-
+        {{ trigger.to_state.attributes.friendly_name
+           | default(trigger.to_state.name, true) }}
+
+      alarm_switches: >-
+        {% set ns = namespace(entities=[]) %}
+        {% for smoke_entity in smoke_detectors %}
+          {% set device = device_id(smoke_entity) %}
+          {% if device %}
+            {% set candidates = device_entities(device)
+                 | select('match', '^switch\\..*_alarm$')
+                 | list %}
+            {% set ns.entities = ns.entities + candidates %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.entities | unique | list }}
+
+      originating_alarm_switch: >-
+        {% set device = device_id(trigger.entity_id) %}
+        {% if device %}
+          {{ device_entities(device)
+             | select('match', '^switch\\..*_alarm$')
+             | list
+             | first
+             | default('', true) }}
+        {% else %}
+          {{ '' }}
+        {% endif %}
+
+      tts_entity: >-
+        {{ integration_entities('tts') | first | default('', true) }}
+
+      scene_id: >-
+        {{ 'smoke_alarm_lights_' ~ (this.entity_id
+           | replace('automation.', '')
+           | replace('.', '_')
+           | replace('-', '_')) }}
+
+  # Save the pre-alarm light states so they can be restored later.
+  - action: scene.create
+    data:
+      scene_id: "{{ scene_id }}"
+      snapshot_entities: !input lights
+
+  # Turn all configured lights on at full brightness.
+  - action: light.turn_on
+    target: !input lights
+    data:
+      brightness_pct: 100
+
+  # Notify all configured smartphones once when the alarm starts.
+  - action: notify.send_message
+    target:
+      entity_id: !input smartphones
+    data:
+      title: "🚨 SMOKE ALARM"
+      message: >-
+        Smoke has been detected by {{ originating_detector }}.
+
+  # Make the initial spoken announcement.
+  - if:
+      - condition: template
+        value_template: >-
+          {{ tts_entity != '' and smart_speakers | length > 0 }}
+    then:
+      - action: tts.speak
+        target:
+          entity_id: "{{ tts_entity }}"
+        data:
+          media_player_entity_id: !input smart_speakers
+          message: >-
+            Attention! Smoke alarm. Smoke has been detected by
+            {{ originating_detector }}.
+
+  # Keep the house-wide alarm active while at least one detector reports smoke.
+  #
+  # repeat.index 1  -> start propagated sirens immediately
+  # repeat.index 13 -> start them again after 12 x 20 s = 240 s
+  # Thus the 240-second siren maximum is refreshed while smoke remains active.
+  - repeat:
+      while:
+        - condition: template
+          value_template: >-
+            {{ expand(smoke_detectors)
+               | selectattr('state', 'eq', 'on')
+               | list
+               | length > 0 }}
+      sequence:
+        # Re-start all other detector sirens every 240 seconds.
+        - if:
+            - condition: template
+              value_template: >-
+                {{ repeat.index == 1 or (repeat.index - 1) % 12 == 0 }}
+          then:
+            - if:
+                - condition: template
+                  value_template: >-
+                    {{ alarm_switches
+                       | reject('equalto', originating_alarm_switch)
+                       | list
+                       | length > 0 }}
+              then:
+                - action: switch.turn_on
+                  target:
+                    entity_id: >-
+                      {{ alarm_switches
+                         | reject('equalto', originating_alarm_switch)
+                         | list }}
+
+        # Wait up to 20 seconds, but stop immediately if all detectors clear.
+        - wait_template: >-
+            {{ expand(smoke_detectors)
+               | selectattr('state', 'eq', 'on')
+               | list
+               | length == 0 }}
+          timeout: "00:00:20"
+          continue_on_timeout: true
+
+        # Repeat the spoken warning every 20 seconds.
+        # The initial announcement above happens at alarm start, so this
+        # produces announcements at approximately 20 s, 40 s, 60 s, etc.
+        - if:
+            - condition: template
+              value_template: >-
+                {{ expand(smoke_detectors)
+                   | selectattr('state', 'eq', 'on')
+                   | list
+                   | length > 0
+                   and tts_entity != ''
+                   and smart_speakers | length > 0 }}
+          then:
+            - action: tts.speak
+              target:
+                entity_id: "{{ tts_entity }}"
+              data:
+                media_player_entity_id: !input smart_speakers
+                message: >-
+                  Attention! Smoke alarm. Smoke has been detected by
+                  {{ originating_detector }}.
+
+  # All detectors are clear: stop propagated sirens.
+  - if:
+      - condition: template
+        value_template: "{{ alarm_switches | length > 0 }}"
+    then:
+      - action: switch.turn_off
+        target:
+          entity_id: "{{ alarm_switches }}"
+
+  # Restore the exact light states captured before the alarm.
+  - action: scene.turn_on
+    target:
+      entity_id: "{{ 'scene.' ~ scene_id }}"
+
+  # Notify all configured smartphones once that the alarm has cleared.
+  - action: notify.send_message
+    target:
+      entity_id: !input smartphones
+    data:
+      title: "✅ SMOKE ALARM CLEARED"
+      message: >-
+        The smoke alarm has cleared. All configured smoke detectors are
+        reporting normal.
+
+mode: single
+max_exceeded: silent
