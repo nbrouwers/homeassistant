@@ -141,6 +141,9 @@ actions:
         value_template: >-
           {{ tts_entity != '' and smart_speakers | length > 0 }}
     then:
+      - action: media_player.turn_on
+        target:
+          entity_id: !input smart_speakers
       - action: tts.speak
         target:
           entity_id: "{{ tts_entity }}"
@@ -207,6 +210,9 @@ actions:
                    and tts_entity != ''
                    and smart_speakers | length > 0 }}
           then:
+            - action: media_player.turn_on
+              target:
+                entity_id: !input smart_speakers
             - action: tts.speak
               target:
                 entity_id: "{{ tts_entity }}"
