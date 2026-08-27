@@ -36,12 +36,23 @@ blueprint:
       name: Smart speakers
       description: >
         Media players on which the smoke alarm announcement will be spoken.
-        The first available Home Assistant TTS entity is used.
+        Select the speakers that should play the announcement.
       selector:
         entity:
           multiple: true
           filter:
             - domain: media_player
+
+    tts_service:
+      name: TTS service
+      description: >
+        The Home Assistant text-to-speech entity used for smoke alarm
+        announcements.
+      selector:
+        entity:
+          multiple: false
+          filter:
+            - domain: tts
 
     smartphones:
       name: Smartphones
@@ -65,6 +76,7 @@ actions:
   - variables:
       smoke_detectors: !input smoke_detectors
       smart_speakers: !input smart_speakers
+      tts_entity: !input tts_service
 
       originating_detector: >-
         {{ trigger.to_state.attributes.friendly_name
@@ -94,9 +106,6 @@ actions:
         {% else %}
           {{ '' }}
         {% endif %}
-
-      tts_entity: >-
-        {{ integration_entities('tts') | first | default('', true) }}
 
       scene_id: >-
         {{ 'smoke_alarm_lights_' ~ (this.entity_id
